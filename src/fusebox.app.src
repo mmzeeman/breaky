@@ -1,0 +1,10 @@
+{application, fusebox,
+ [
+  {description, "Erlang Automatic Fusebox"},
+  {vsn, "1"},
+  {mod, {fusebox_app, []}},
+  {modules, [fusebox_app, fusebox]},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {env, []}
+ ]}.
