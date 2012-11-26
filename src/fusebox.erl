@@ -23,7 +23,7 @@
 	start_fuse/1, 
 	stop_fuse/1,
 
-	call/4
+	call/2
 	]).
 
 % @doc Start a new fusebox.
@@ -35,5 +35,5 @@ stop_fuse(Name) ->
     fusebox_app_sup:stop_fuse(Name).
 
 % @doc
-call(Name, MFA)
+call(Name, MFA) ->
 	fusebox_app_sup:call(Name, MFA).

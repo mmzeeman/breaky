@@ -25,7 +25,7 @@
 
 -export([init/1]).
 
--export([start_link/0, start_fuse/1, stop_fuse/1]).
+-export([start_link/0, start_fuse/1, stop_fuse/1, call/2]).
 
 -define(TABLE, fusebox).
 
@@ -53,7 +53,7 @@ stop_fuse(_Name) ->
 call(Name, MFA) ->
     case ets:lookup(?TABLE, Name) of
         [Name, Pid, StateName] ->
-        	fuse:call(Pid, State, MFA);
+        	fuse:call(Pid, StateName, MFA);
         [] ->
         	{error, unknown_fuse} 
     end.

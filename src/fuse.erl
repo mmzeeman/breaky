@@ -58,26 +58,60 @@
 start_link(Name, Sup, Table) ->
     gen_fsm:start_link({local, Name}, ?MODULE, [Name, Sup, Table], []).
 
+
+%% @doc 
+call(FusePid, closed, {M, F, A}) ->
+    %% everything is safe, call the MFA, but check for errors 
+    %% and timeouts.
+    Ref = erlang:make_ref(),
+    Pid = self(),
+    erlang:spawn_link(fun() ->
+        try
+            Pid ! {ok, Ref, erlang:apply(M, F, A)}
+        catch
+            Exception ->
+                Pid ! {throw, Ref, Exception}
+        end        
+    end),
+    receive
+        {ok, Ref, Term} ->
+            Term;
+        {throw, Ref, Exception} ->
+            gen_fsm:send_event(FusePid, failure),
+            throw(Exception)
+    after 
+        60000 ->
+            gen_fsm:send_event(FusePid, failure),
+            throw(timeout) 
+    end;
+call(_Pid, half_open, {_M, _F, _A}) ->
+    throw(belum);
+
+call(_Pid, open, {_M, _F, _A}) ->
+    throw(open).
+
+
 %% Initialize the fuse. It is in closed state.
 %% 
 %% TODO: create ets table for easy reading of "current" state.
 init([Name, Sup, Table]) ->
     self() ! {start_subject_supervisor, Sup},
-
-    %% TODO: read current state from the table...
     true = ets:insert(Table, {Name, self(), closed}),
     {ok, closed, #state{name=Name, table=Table}}.
 
 % @doc The automatic fuse is closed
-closed(_Event, State) ->
-	{next_state, closed, State}.
+closed(failure, #state{remainder_fails=F}=State) when F > 1 -> 
+	{next_state, closed, State#state{remainder_fails=F-1}};
+closed(failure, #state{remainder_fails=1, name=Name, table=Table}=State) ->
+    ets:insert(Table, {Name, self, open}), 
+    {next_state, open, State#state{remainder_fails=0}}.
 
 % @doc The automatic fuse is closed
 closed(_Event, _From, State) ->
 	{next_state, closed, State}.
 
 % @doc The automatic fuse is half open
-half_open(_Event, State) ->
+half_open(failure, State) ->
     {next_state, half_open, State}.
     
 % @doc 
@@ -85,7 +119,7 @@ half_open(_Event, _From, State) ->
     {next_state, half_open, State}.
 
 % @doc The fuse is open.
-open(_Event, State) ->
+open(failure, State) ->
     {next_state, open, State}.
 
 open(_Event, _From, State) ->
@@ -136,34 +170,3 @@ ensure_supervisor(Sup, Spec) ->
         {error, {already_started, Pid}} -> 
             Pid
     end. 
-    
-
-%%
-
-call(FusePid, closed, {M, F, A}) ->
-    %% everything is safe, call the MFA, but check for errors 
-    %% and timeouts.
-    Ref = erlang:make_ref(),
-    Pid = self(),
-    F = fun() ->
-        try
-            Pid ! {ok, Ref, erlang:apply(M, F, A)}
-        catch
-            Exception ->
-                Pid ! {throw, Ref, Exception}
-        end        
-    end,
-    erlang:spawn(F),
-    receive
-        {ok, Ref, Term} ->
-            Term;
-        {throw, Ref, Exception} ->
-            gen_fsm:exception(FusePid),
-            throw(Exception)
-    end;
-call(Pid, half_open, {M, F, A}) ->
-    
-call(Pid, open, {_M, _F, _A}) ->
-    throw(open).
-    
-
