@@ -17,23 +17,17 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(fusebox).
+-module(breaky_app).
 
--export([
-	start_fuse/1, 
-	stop_fuse/1,
+-behaviour(application).
 
-	call/2
-	]).
+%% Application callbacks
+-export([start/2, stop/1]).
 
-% @doc Start a new fusebox.
-start_fuse(Name) ->
-    fusebox_app_sup:start_fuse(Name).
+% @doc Start breaky.
+start(_StartType, _StartArgs) ->
+    breaky_app_sup:start_link().
 
-% @doc Stop the Named fusebox.
-stop_fuse(Name) ->
-    fusebox_app_sup:stop_fuse(Name).
-
-% @doc
-call(Name, MFA) ->
-	fusebox_app_sup:call(Name, MFA).
+% @doc and stop it.
+stop(_State) ->
+    ok.

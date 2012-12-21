@@ -17,17 +17,15 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(fuse_subject_sup).
-
--export([start_link/0, init/1]).
+-module(breaky_sup).
+-export([start_link/2, init/1]).
 -behaviour(supervisor).
 
-% @doc
-start_link() ->
-	supervisor:start_link(?MODULE, []).
+start_link(Name, MFA) ->
+    supervisor:start_link(?MODULE, [Name, MFA]).
 
-% @doc Start a supervisor for the fuse. All processes started 
-% by the fuse will be monitored. Restarts are managed by the
-% fuse fsm.
-init([]) ->
-	{ok, {{one_for_one, 5, 3600}, []}}.
+init([Name, MFA]) ->
+    {ok, {{one_for_all, 5, 3600},
+          [{breaky_break,
+             {breaky_break, start_link, [Name, self(), MFA]},
+             permanent, 5000, worker, [breaky_break]}]}}.

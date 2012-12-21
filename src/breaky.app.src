@@ -1,0 +1,10 @@
+{application, breaky,
+ [
+  {description, "Erlang Circuit Breaker"},
+  {vsn, "1"},
+  {mod, {breaky_app, []}},
+  {modules, [breaky_app, breaky]},
+  {registered, []},
+  {applications, [kernel, stdlib]},
+  {env, []}
+ ]}.

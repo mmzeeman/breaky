@@ -1,7 +1,7 @@
 %% @author Maas-Maarten Zeeman <mmzeeman@xs4all.nl>
 %% @copyright 2012 Maas-Maarten Zeeman
 %%
-%% @doc Erlang Fusebox
+%% @doc Erlang Circuit Breaker 
 %%
 %% Copyright 2012 Maas-Maarten Zeeman
 %%
@@ -17,17 +17,17 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(fusebox_app).
+-module(breaky_break_sup).
 
--behaviour(application).
+-export([start_link/0, init/1]).
+-behaviour(supervisor).
 
-%% Application callbacks
--export([start/2, stop/1]).
+% @doc
+start_link() ->
+	supervisor:start_link(?MODULE, []).
 
-% @doc Start fusebox.
-start(_StartType, _StartArgs) ->
-    fusebox_app_sup:start_link().
-
-% @doc and stop it.
-stop(_State) ->
-    ok.
+% @doc Start a supervisor for the fuse. All processes started 
+% by the fuse will be monitored. Restarts are managed by the
+% fuse fsm.
+init([]) ->
+	{ok, {{one_for_one, 5, 3600}, []}}.

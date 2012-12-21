@@ -1,7 +1,7 @@
 %% @author Maas-Maarten Zeeman <mmzeeman@xs4all.nl>
 %% @copyright 2012 Maas-Maarten Zeeman
 %%
-%% @doc Erlang Fusebox
+%% @doc Erlang Circuit Breaker
 %%
 %% Copyright 2012 Maas-Maarten Zeeman
 %%
@@ -17,15 +17,33 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(fuse_sup).
--export([start_link/2, init/1]).
+%%% The top-level supervisor of the registration
+%%% server.
+
+-module(breaky_app_sup).
 -behaviour(supervisor).
 
-start_link(Name, Table) ->
-    supervisor:start_link(?MODULE, [Name, Table]).
+-export([init/1]).
 
-init([Name, Table]) ->
-    {ok, {{one_for_all, 5, 3600},
-          [{fuse,
-             {fuse, start_link, [Name, self(), Table]},
-             permanent, 5000, worker, [fuse]}]}}.
+-export([start_link/0]).
+
+-export([start/2, stop/1]).
+
+% @doc
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+% @doc
+init([]) ->
+    {ok, {{one_for_one, 1, 3600}, []}}.
+
+% @doc Start a fuse
+start(Name, MFA) ->
+    ChildSpec = {Name,
+        {breaky_sup, start_link, [Name, MFA]},
+        permanent, 10000, supervisor, [breaky_sup, breaky_break, breaky_break_sup]},
+    {ok, _Pid} = supervisor:start_child(?MODULE, ChildSpec).
+
+% @doc Stop 
+stop(Name) ->
+    ok.

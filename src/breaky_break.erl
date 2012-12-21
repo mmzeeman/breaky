@@ -1,7 +1,7 @@
 %% @author Maas-Maarten Zeeman <mmzeeman@xs4all.nl>
 %% @copyright 2012 Maas-Maarten Zeeman
 %%
-%% @doc Erlang Fusebox
+%% @doc Erlang Circuit Breaker
 %%
 %% Copyright 2012 Maas-Maarten Zeeman
 %%
@@ -17,7 +17,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(fuse).
+-module(breaky_break).
 
 -behaviour(gen_fsm).
 
@@ -40,9 +40,6 @@
 	code_change/4
 	]).
 
--export([call/3]).
-
-
 -record(state, {
 	threshold=10,
 	remainder_fails=10,
@@ -51,66 +48,32 @@
 
     name=undefined,
     subject_sup=undefined,
-    table=undefined
+    mfa=undefined
 }).
 
-%% Start a fuse.
-start_link(Name, Sup, Table) ->
-    gen_fsm:start_link({local, Name}, ?MODULE, [Name, Sup, Table], []).
+%% Start a circuit breaker.
+start_link(Name, Sup, MFA) ->
+    gen_fsm:start_link({local, Name}, ?MODULE, [Name, Sup, MFA], []).
 
 
-%% @doc 
-call(FusePid, closed, {M, F, A}) ->
-    %% everything is safe, call the MFA, but check for errors 
-    %% and timeouts.
-    Ref = erlang:make_ref(),
-    Pid = self(),
-    erlang:spawn_link(fun() ->
-        try
-            Pid ! {ok, Ref, erlang:apply(M, F, A)}
-        catch
-            Exception ->
-                Pid ! {throw, Ref, Exception}
-        end        
-    end),
-    receive
-        {ok, Ref, Term} ->
-            Term;
-        {throw, Ref, Exception} ->
-            gen_fsm:send_event(FusePid, failure),
-            throw(Exception)
-    after 
-        60000 ->
-            gen_fsm:send_event(FusePid, failure),
-            throw(timeout) 
-    end;
-call(_Pid, half_open, {_M, _F, _A}) ->
-    throw(belum);
-
-call(_Pid, open, {_M, _F, _A}) ->
-    throw(open).
-
-
-%% Initialize the fuse. It is in closed state.
+%% Initialize the circuit breaker. It is in closed state.
 %% 
 %% TODO: create ets table for easy reading of "current" state.
-init([Name, Sup, Table]) ->
+init([Name, Sup, MFA]) ->
     self() ! {start_subject_supervisor, Sup},
-    true = ets:insert(Table, {Name, self(), closed}),
-    {ok, closed, #state{name=Name, table=Table}}.
+    {ok, closed, #state{name=Name, mfa=MFA}}.
 
-% @doc The automatic fuse is closed
+% @doc The automatic circuit breaker is closed
 closed(failure, #state{remainder_fails=F}=State) when F > 1 -> 
 	{next_state, closed, State#state{remainder_fails=F-1}};
-closed(failure, #state{remainder_fails=1, name=Name, table=Table}=State) ->
-    ets:insert(Table, {Name, self, open}), 
+closed(failure, #state{remainder_fails=1, name=Name}=State) ->
     {next_state, open, State#state{remainder_fails=0}}.
 
-% @doc The automatic fuse is closed
+% @doc The automatic circuit breaker is closed
 closed(_Event, _From, State) ->
 	{next_state, closed, State}.
 
-% @doc The automatic fuse is half open
+% @doc The automatic circuit breaker is half open
 half_open(failure, State) ->
     {next_state, half_open, State}.
     
@@ -143,9 +106,9 @@ handle_sync_event(_Msg, _From, open, State) ->
 
 % @doc 
 handle_info({start_subject_supervisor, Sup}, StateName, State) ->
-    Spec = {fuse_subject_sup,
-            {fuse_subject_sup, start_link, []},
-             permanent, 10000, supervisor, [fuse_subject_sup]},
+    Spec = {breaky_break_sup,
+            {breaky_break_sup, start_link, []},
+             permanent, 10000, supervisor, [breaky_break_sup]},
     Pid = ensure_supervisor(Sup, Spec),
     {next_state, StateName, State#state{subject_sup=Pid}};
 handle_info(_Msg, closed, State) ->
