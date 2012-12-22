@@ -37,13 +37,16 @@ start_link() ->
 init([]) ->
     {ok, {{one_for_one, 1, 3600}, []}}.
 
-% @doc Start a fuse
+% @doc Start a circuit breaker
 start(Name, MFA) ->
     ChildSpec = {Name,
         {breaky_sup, start_link, [Name, MFA]},
         permanent, 10000, supervisor, [breaky_sup, breaky_break, breaky_break_sup]},
-    {ok, _Pid} = supervisor:start_child(?MODULE, ChildSpec).
+    supervisor:start_child(?MODULE, ChildSpec).
 
-% @doc Stop 
+% @doc Stop the circuit breaker
 stop(Name) ->
-    ok.
+    case supervisor:terminate_child(?MODULE, Name) of
+        ok -> supervisor:delete_child(?MODULE, Name);
+        {error, _}=Error -> Error
+    end.

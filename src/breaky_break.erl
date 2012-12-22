@@ -23,12 +23,15 @@
 
 %% 
 -export([
-	start_link/3
+    start_link/2,
+	start_link/3,
+    pid/1
 	]).
 
 %% gen_fsm callbacks
 -export([
-	init/1, 
+	init/1,
+    initializing/2, initializing/3, 
 	closed/2, closed/3, 
 	open/2, open/3,
 	half_open/2,  half_open/3,
@@ -41,52 +44,122 @@
 	]).
 
 -record(state, {
-	threshold=10,
+	%% threshold=10,
+
 	remainder_fails=10,
 	attempt_timeout=10000,
 	timeout_timer=undefined,
 
     name=undefined,
-    subject_sup=undefined,
-    mfa=undefined
+    sup=undefined,
+
+    pid=undefined,
+    ref=undefined
 }).
 
+%%
+%% The circuit breaker has three states.
+%%
+%% 1) ``closed``, everything is normal.
+%% 2) ``open``, the process has failed to many times, after timeout the 
+%%    switch will move to ``half_open`` state.
+%% 3) ``half_open`` state. The failed process is restarted. If this fails
+%%    the switch will move to open state, when it fails it will go to
+%%    open state.
+%%
+
 %% Start a circuit breaker.
+
+%% TODO: support for global and via
+start_link(Name, MFA) ->
+    start_link(Name, self(), MFA).
 start_link(Name, Sup, MFA) ->
     gen_fsm:start_link({local, Name}, ?MODULE, [Name, Sup, MFA], []).
 
+% @doc Start the process which will be managed by the circuit breaker.
+%
+% run(Name, Args) ->
+%     gen_fsm:sync_send_event(Name, {run, Args}).
+
+% @doc Return the pid of the process we are managing.
+%
+pid(Name) ->
+    gen_fsm:sync_send_event(Name, pid).
+
+% call(Name, Msg, infinity) ->
+%     case gen_fsm:sync_send_event(Name, get_pid) of
+%         {ok, Pid} ->
+%             gen_server:call(Pid, Msg);
+%         E ->
+%             E
+%     end;
+% call(Name, Msg, Timeout) ->
+%     %% TODO: calculate the right timeout here.
+%     case gen_fsm:sync_send_event(Name, get_pid, Timeout) of
+%         {ok, Pid} ->
+%             gen_server:call(Pid, Msg, Timeout);
+%         E ->
+%             E
+%     end.
+
+
+% cast(Name, Msg) ->
+%     todo.
+
+%% Let the circuit breaker act as a process registry. Returns the
+%% Pid when the process is running.
+% whereis_name(Name) ->
+%     todo.
+
+% %% Let the circuit breaker act as a process registry. Returns the
+% %% Pid when the process is running.
+% send(Name) ->
+%     todo.
 
 %% Initialize the circuit breaker. It is in closed state.
 %% 
-%% TODO: create ets table for easy reading of "current" state.
 init([Name, Sup, MFA]) ->
-    self() ! {start_subject_supervisor, Sup},
-    {ok, closed, #state{name=Name, mfa=MFA}}.
+    self() ! {initialize, Sup, MFA},
+    {ok, initializing, #state{name=Name}}.
+
+% @doc Not expecting any events in init state.
+initializing(_Event, State) ->
+    {stop, {error, not_initialized}, State}.
+initializing(_Event, _From, State) ->
+    {stop, {error, not_initialized}, State}.
 
 % @doc The automatic circuit breaker is closed
-closed(failure, #state{remainder_fails=F}=State) when F > 1 -> 
-	{next_state, closed, State#state{remainder_fails=F-1}};
-closed(failure, #state{remainder_fails=1, name=Name}=State) ->
-    {next_state, open, State#state{remainder_fails=0}}.
+closed(Event, State) -> 
+	{stop, {error, {unknown_event, Event}}, State}.
 
-% @doc The automatic circuit breaker is closed
-closed(_Event, _From, State) ->
-	{next_state, closed, State}.
+closed(pid, _From, #state{pid=Pid}=State) when is_pid(Pid) ->
+    {reply, {ok, Pid}, closed, State};
+closed(pid, _From, #state{pid=undefined}=State) ->
+    %% we should have a pid in closed state.
+    exit(pid_undefined);
+closed(Event, _From, State) ->
+    {stop, {error, {unknown_event, Event}}, State}.
 
-% @doc The automatic circuit breaker is half open
-half_open(failure, State) ->
-    {next_state, half_open, State}.
-    
-% @doc 
-half_open(_Event, _From, State) ->
-    {next_state, half_open, State}.
+% @doc The circuit breaker is half open
+%
+half_open(Event, State) ->
+    {stop, {error, {unknown_event, Event}}, State}.
+
+half_open(pid, _From, State) ->
+    %% TODO: this could also trigger us to do a retry.
+    {reply, {error, half_open}, State};
+half_open(Event, _From, State) ->
+    {stop, {error, {unknown_event, Event}}, State}.
 
 % @doc The fuse is open.
-open(failure, State) ->
-    {next_state, open, State}.
+%
+open(Event, State) ->
+    {stop, {error, {unknown_event, Event}}, State}.
 
-open(_Event, _From, State) ->
-    {next_state, open, State}.
+open(pid, _From, State) ->
+    {reply, {error, open}, open, State};
+open(Event, _From, State) ->
+    {stop, {error, {unknown_event, Event}}, State}.
 
 % @doc 
 handle_event(_Msg, closed, State) ->
@@ -104,19 +177,33 @@ handle_sync_event(_Msg, _From, half_open, State) ->
 handle_sync_event(_Msg, _From, open, State) ->
     {reply, ok, open, State}.
 
-% @doc 
-handle_info({start_subject_supervisor, Sup}, StateName, State) ->
+% @doc initialize. start the supervisor. 
+handle_info({initialize, Sup, MFA}, initializing, State) ->
     Spec = {breaky_break_sup,
-            {breaky_break_sup, start_link, []},
+            {breaky_break_sup, start_link, [MFA]},
              permanent, 10000, supervisor, [breaky_break_sup]},
-    Pid = ensure_supervisor(Sup, Spec),
-    {next_state, StateName, State#state{subject_sup=Pid}};
-handle_info(_Msg, closed, State) ->
-    {next_state, closed, State};
-handle_info(_Msg, half_open, State) ->
-    {next_state, half_open, State};
-handle_info(_Msg, open, State) ->
-    {next_state, open, State}.
+    {ok, SupPid} = supervisor:start_child(Sup, Spec),
+    {NextState, NewState} = start_process(State#state{sup=SupPid}),
+    {next_state, NextState, NewState};
+handle_info({initialize, _Sup, _MFA}, _Other, State) ->
+    {stop, {error, already_initialized}, State};
+
+%% The process stopped normally. 
+handle_info({'DOWN', Ref, process, _Pid, normal}, StateName, #state{ref=Ref}=State) ->
+    {next_state, StateName, State#state{pid=undefined, ref=undefined}};
+
+% Failure.... restart? or move to open state?
+handle_info({'DOWN', Ref, process, _Pid, _Reason}, closed, #state{ref=Ref, remainder_fails=R}=State) ->
+    {NextState, NewState} = start_process(State#state{pid=undefined, ref=undefined, remainder_fails=R-1}),
+    {next_state, NextState, NewState};
+
+% Go to open state
+handle_info({'DOWN', Ref, process, _Pid, _Reason}, StateName, #state{ref=Ref}=State) 
+        when StateName =:= half_open; StateName =:= open ->
+    {next_state, open, State#state{ref=undefined}};
+
+handle_info(_Msg, StateName, #state{}=State) ->
+    {next_state, StateName, State}.
 
 % @doc 
 terminate(_Reason, _StateName, _State) ->
@@ -126,10 +213,20 @@ terminate(_Reason, _StateName, _State) ->
 code_change(_OldVsn, StateName, State, _Extra) ->
 	{ok, StateName, State}.
 
-ensure_supervisor(Sup, Spec) ->
-    case supervisor:start_child(Sup, Spec) of
-        {ok, Pid} -> 
-            Pid;
-        {error, {already_started, Pid}} -> 
-            Pid
-    end. 
+
+% utility functions
+
+start_process(#state{sup=Sup, remainder_fails=F}=State) when F > 0->
+    case supervisor:start_child(Sup, []) of
+        {ok, Pid} ->
+            NewRef = erlang:monitor(process, Pid),
+            {closed, State#state{ref=NewRef, pid=Pid}};
+        {error, Error} ->
+            error_logger:error_msg("Circuit breaker could not start process: ~p~n", [Error]),
+            start_process(State#state{remainder_fails=F-1})
+    end;
+start_process(#state{sup=Sup, remainder_fails=F}=State) when F =< 0 ->
+    %% Too many failures... switch to open state.
+    %% TODO: set a timer to get back top half_open state.
+    {open, State#state{remainder_fails=0}}.
+

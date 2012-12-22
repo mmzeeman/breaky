@@ -1,3 +1,7 @@
+ebin
 rebar
-ebin/*
-
+.eunit
+deps
+*.o
+*.beam
+*.plt

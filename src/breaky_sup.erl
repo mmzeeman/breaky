@@ -1,7 +1,7 @@
 %% @author Maas-Maarten Zeeman <mmzeeman@xs4all.nl>
 %% @copyright 2012 Maas-Maarten Zeeman
 %%
-%% @doc Erlang Fusebox
+%% @doc Erlang Circuit Breaker
 %%
 %% Copyright 2012 Maas-Maarten Zeeman
 %%
@@ -27,5 +27,5 @@ start_link(Name, MFA) ->
 init([Name, MFA]) ->
     {ok, {{one_for_all, 5, 3600},
           [{breaky_break,
-             {breaky_break, start_link, [Name, self(), MFA]},
+             {breaky_break, start_link, [Name, MFA]},
              permanent, 5000, worker, [breaky_break]}]}}.

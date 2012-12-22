@@ -17,7 +17,9 @@ application_start_stop_test() ->
 breaky_test_() ->
     {foreach, local, fun setup/0, fun teardown/1,
      [ ?_test(start_stop_t()),
-       ?_test(run_something_t())
+       ?_test(run_something_t()),
+       ?_test(multiple_t()),
+       ?_test(crash_something_t())
      ]
     }.
 
@@ -30,16 +32,44 @@ start_stop_t() ->
 	
 	%% Stop it.
 	breaky:stop_circuit_breaker(circuit1),
-
 	false = is_process_alive(Pid).
 
 run_something_t() ->
 	{ok, _CircuitPid} = breaky:start_circuit_breaker(circuit1, 
-		{breaky_test_server, start_link, []}),
-
-	{ok, Pid} = breaky:run(circuit1, ["data"]),
+		{breaky_test_server, start_link, ["data"]}),
+	{ok, Pid} = breaky:pid(circuit1),
 	true = is_process_alive(Pid),
+	{ok, "data"} = gen_server:call(Pid, get_data),
 
 	breaky:stop_circuit_breaker(circuit1),
 	false = is_process_alive(Pid).
 
+multiple_t() ->
+	{ok, Pid1} = breaky:start_circuit_breaker(circuit1, 
+		{breaky_test_server, start_link, ["data"]}),
+	{ok, Pid2} = breaky:start_circuit_breaker(circuit2, 
+		{breaky_test_server, start_link, ["data"]}),
+	?assert(Pid1 =/= Pid2),
+	breaky:stop_circuit_breaker(circuit1),
+	breaky:stop_circuit_breaker(circuit2).
+
+crash_something_t() ->
+	{ok, BPid} = breaky:start_circuit_breaker(circuit1, 
+		{breaky_test_server, start_link, ["data"]}),
+
+	%% Kill the process.
+	{ok, Pid1} = breaky:pid(circuit1),
+
+	exit(Pid1, brutal_kill),
+	false = is_process_alive(Pid1),
+	true = is_process_alive(BPid),
+
+	%% Give it some time to restart.
+	timer:sleep(100),
+
+	%% The process was restarted.
+	{ok, Pid2} = breaky:pid(circuit1),
+	?assert(Pid1 =/= Pid2),
+	{ok, "data"} = gen_server:call(Pid2, get_data),
+
+	breaky:stop_circuit_breaker(circuit1).

@@ -19,15 +19,20 @@
 
 -module(breaky_break_sup).
 
--export([start_link/0, init/1]).
+-export([start_link/1, init/1]).
 -behaviour(supervisor).
 
-% @doc
-start_link() ->
-	supervisor:start_link(?MODULE, []).
+% @doc 
+-spec start_link(MFA) -> {ok, pid()} | {error, _} | ignore when
+	MFA :: mfa().
+start_link(MFA) ->
+	supervisor:start_link(?MODULE, MFA).
 
-% @doc Start a supervisor for the fuse. All processes started 
-% by the fuse will be monitored. Restarts are managed by the
-% fuse fsm.
-init([]) ->
-	{ok, {{one_for_one, 5, 3600}, []}}.
+% @doc Start a supervisor for the breaker. 
+%
+init({Module, Function, Args}) ->
+	% TODO: add an option to configure a task supervisor which
+	% can restart tasks if they fail.
+    {ok, {{simple_one_for_one, 10, 60},
+          [{tubby_task, {Module, Function, Args},
+            temporary, 5000, worker, [Module]}]}}.

@@ -19,16 +19,39 @@
 
 -module(breaky).
 
--export([start/2, stop/1]).
+-export([start_circuit_breaker/2, stop_circuit_breaker/1]).
+-export([pid/1, call/2, call/3, cast/2]).
 
 % @doc Start a new circuit breaker.
 %
-start(Name, MFA) ->
+-spec start_circuit_breaker(Name, MFA) -> {ok, pid()} | {error, _} | ignore when
+    Name :: atom(),
+	MFA :: mfa().
+start_circuit_breaker(Name, MFA) ->
     breaky_app_sup:start(Name, MFA).
 
-% @doc Stop the Named fusebox.
+% @doc Stop the circuit breaker with Name. 
 %
-stop(Name) ->
+-spec stop_circuit_breaker(Name) -> ok | {error, _} when
+    Name :: atom().
+stop_circuit_breaker(Name) ->
     breaky_app_sup:stop(Name).
 
+% @doc Get the pid of the process managed by the supervisor
+%
+-spec pid(Name) -> {ok, pid()} | {error, _} when
+	Name :: atom().
+pid(Name) ->
+	breaky_break:pid(Name).
 
+% @doc Call the process
+%
+call(Name, Msg) ->
+	call(Name, Msg, infinity).
+call(Name, Msg, Timeout) ->
+	breaky_break:call(Name, Msg, Timeout).
+
+% @doc Cast the process 
+%
+cast(Name, Msg) ->
+	breaky_break:cast(Name, Msg).

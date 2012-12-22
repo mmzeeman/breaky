@@ -20,6 +20,9 @@ init(Data) ->
 
 handle_call(get_data, _From, State) ->
 	{reply, {ok, State#state.data}, State};
+handle_call(crash, From, State) ->
+	From = self(), %% kaboom baby shit is gone.
+	{reply, {ok, State#state.data}, State};
 handle_call(stop, _From, State) ->
 	{stop, normal, ok, State};
 handle_call(Msg, _From, State) ->

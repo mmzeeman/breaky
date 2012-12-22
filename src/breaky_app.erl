@@ -1,7 +1,7 @@
 %% @author Maas-Maarten Zeeman <mmzeeman@xs4all.nl>
 %% @copyright 2012 Maas-Maarten Zeeman
 %%
-%% @doc Erlang Fusebox
+%% @doc Erlang Circuit Breaker
 %%
 %% Copyright 2012 Maas-Maarten Zeeman
 %%
