@@ -3,7 +3,7 @@
   {description, "Erlang Circuit Breaker"},
   {vsn, "1"},
   {mod, {breaky_app, []}},
-  {modules, [breaky_app, breaky]},
+  {modules, [breaky_app, breaky_app_sup, breaky, breaky_fsm, breaky_fsm_sup]},
   {registered, []},
   {applications, [kernel, stdlib]},
   {env, []}

@@ -24,31 +24,35 @@
 %% 
 -export([
     start_link/2,
-	start_link/3,
+    start_link/3,
     pid/1,
-    state/1
-	]).
+    state/1,
+    call/2, call/3,
+    cast/2,
+    whereis_name/1,
+    send/2
+    ]).
 
 %% gen_fsm callbacks
 -export([
-	init/1,
+    init/1,
     initializing/2, initializing/3, 
-	closed/2, closed/3, 
-	open/2, open/3,
-%	reset/0,
-	handle_event/3,
-	handle_sync_event/4,
-	handle_info/3, 
-	terminate/3, 
-	code_change/4
-	]).
+    closed/2, closed/3, 
+    open/2, open/3,
+%   reset/0,
+    handle_event/3,
+    handle_sync_event/4,
+    handle_info/3, 
+    terminate/3, 
+    code_change/4
+    ]).
 
 -record(state, {
-	failure_threshold=10,
+    failure_threshold=10,
     remainder_fails=10,
 
-	retry_timeout=10000,
-	retry_timer=undefined,
+    retry_timeout=10000,
+    retry_timer=undefined,
 
     name=undefined,
     sup=undefined,
@@ -58,7 +62,7 @@
 }).
 
 %%
-%% The circuit breaker has three states.
+%% The circuit breaker has two states.
 %%
 %% 1) ``closed``, everything is normal.
 %% 2) ``open``, the process has failed to many times, after timeout the 
@@ -83,35 +87,50 @@ pid(Name) ->
 state(Name) ->
     gen_fsm:sync_send_all_state_event(Name, state).
 
-% call(Name, Msg, infinity) ->
-%     case gen_fsm:sync_send_event(Name, get_pid) of
-%         {ok, Pid} ->
-%             gen_server:call(Pid, Msg);
-%         E ->
-%             E
-%     end;
-% call(Name, Msg, Timeout) ->
-%     %% TODO: calculate the right timeout here.
-%     case gen_fsm:sync_send_event(Name, get_pid, Timeout) of
-%         {ok, Pid} ->
-%             gen_server:call(Pid, Msg, Timeout);
-%         E ->
-%             E
-%     end.
+% This w
+call(Name, Msg) ->
+    call(Name, Msg, 5000).
 
+call(Name, Msg, infinity) ->
+    case gen_fsm:sync_send_event(Name, get_pid, infinity) of
+        {ok, Pid} ->
+            %% TODO: add a catch and administrate failures.
+            gen_server:call(Pid, Msg, infinity);
+        E -> E
+    end;
+call(Name, Msg, Timeout) ->
+    %% TODO: calculate the right timeout here.
+    case gen_fsm:sync_send_event(Name, get_pid, Timeout) of
+        {ok, Pid} ->
+            %% TODO: add a catch and administrate failures.
+            gen_server:call(Pid, Msg, Timeout);
+        E -> E
+    end.
 
-% cast(Name, Msg) ->
-%     todo.
+cast(Name, Msg) ->
+    case gen_fsm:sync_send_event(Name, get_pid) of
+        {ok, Pid} ->
+            gen_server:cast(Pid, Msg);
+        E -> E
+    end.
 
 %% Let the circuit breaker act as a process registry. Returns the
 %% Pid when the process is running.
-% whereis_name(Name) ->
-%     todo.
+whereis_name(Name) ->
+    case gen_fsm:sync_send_event(Name, get_pid) of
+        {ok, Pid} -> Pid;
+        E -> E
+    end.
 
 % %% Let the circuit breaker act as a process registry. Returns the
 % %% Pid when the process is running.
-% send(Name) ->
-%     todo.
+send(Name, Msg) ->
+    case gen_fsm:sync_send_event(Name, get_pid) of
+        {ok, Pid} -> 
+            Pid ! Msg,
+            Pid;
+        E -> E
+    end.
 
 %% Initialize the circuit breaker. It is in closed state.
 %% 
@@ -131,7 +150,7 @@ closed(retry, State) ->
     State1 = State#state{retry_timer=undefined},
     {next_state, closed, State1};
 closed(Event, State) -> 
-	{stop, {error, {unknown_event, Event}}, State}.
+    {stop, {error, {unknown_event, Event}}, State}.
 
 closed(pid, _From, #state{pid=Pid}=State) when is_pid(Pid) ->
     {reply, {ok, Pid}, closed, State};
@@ -174,9 +193,9 @@ handle_sync_event(_Msg, _From, StateName, State) ->
 
 % @doc initialize. start the supervisor. 
 handle_info({initialize, Sup, MFA}, initializing, State) ->
-    Spec = {breaky_break_sup,
-            {breaky_break_sup, start_link, [MFA]},
-             permanent, 10000, supervisor, [breaky_break_sup]},
+    Spec = {breaky_fsm_sup,
+            {breaky_fsm_sup, start_link, [MFA]},
+             permanent, 10000, supervisor, [breaky_fsm_sup]},
     {ok, SupPid} = supervisor:start_child(Sup, Spec),
     {NextState, NewState} = start_process(State#state{sup=SupPid}),
     {next_state, NextState, NewState};    
@@ -198,11 +217,11 @@ handle_info(_Msg, StateName, #state{}=State) ->
 
 % @doc 
 terminate(_Reason, _StateName, _State) ->
-	ok.
+    ok.
 
 % @doc
 code_change(_OldVsn, StateName, State, _Extra) ->
-	{ok, StateName, State}.
+    {ok, StateName, State}.
 
 % utility functions
 

@@ -26,6 +26,6 @@ start_link(Name, MFA) ->
 
 init([Name, MFA]) ->
     {ok, {{one_for_all, 5, 3600},
-          [{breaky_break,
-             {breaky_break, start_link, [Name, MFA]},
-             permanent, 5000, worker, [breaky_break]}]}}.
+          [{breaky_fsm,
+             {breaky_fsm, start_link, [Name, MFA]},
+             permanent, 5000, worker, [breaky_fsm, breaky_fsm_sup]}]}}.

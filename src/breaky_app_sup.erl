@@ -41,7 +41,7 @@ init([]) ->
 start(Name, MFA) ->
     ChildSpec = {Name,
         {breaky_sup, start_link, [Name, MFA]},
-        permanent, 10000, supervisor, [breaky_sup, breaky_break, breaky_break_sup]},
+        permanent, 10000, supervisor, [breaky_sup, breaky_fsm, breaky_fsm_sup]},
     supervisor:start_child(?MODULE, ChildSpec).
 
 % @doc Stop the circuit breaker

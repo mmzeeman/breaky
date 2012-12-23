@@ -20,13 +20,13 @@
 -module(breaky).
 
 -export([start_circuit_breaker/2, stop_circuit_breaker/1]).
--export([pid/1, call/2, call/3, cast/2]).
+-export([pid/1, state/1, call/2, call/3, cast/2]).
 
 % @doc Start a new circuit breaker.
 %
 -spec start_circuit_breaker(Name, MFA) -> {ok, pid()} | {error, _} | ignore when
     Name :: atom(),
-	MFA :: mfa().
+    MFA :: mfa().
 start_circuit_breaker(Name, MFA) ->
     breaky_app_sup:start(Name, MFA).
 
@@ -40,18 +40,36 @@ stop_circuit_breaker(Name) ->
 % @doc Get the pid of the process managed by the supervisor
 %
 -spec pid(Name) -> {ok, pid()} | {error, _} when
-	Name :: atom().
+    Name :: atom().
 pid(Name) ->
-	breaky_break:pid(Name).
+    breaky_fsm:pid(Name).
+
+% @doc Get the pid of the process managed by the supervisor
+%
+-spec state(Name) -> closed | half_open | open when
+    Name :: atom().
+state(Name) ->
+    breaky_fsm:state(Name).
 
 % @doc Call the process
 %
+-spec call(Name, Msg) -> any() when
+    Name :: atom(),
+    Msg :: term().
 call(Name, Msg) ->
-	call(Name, Msg, infinity).
+    call(Name, Msg, 5000).
+
+-spec call(Name, Msg, Timeout) -> any() when
+    Name :: atom(),
+    Msg :: term(),
+    Timeout :: non_neg_integer() | infinity.
 call(Name, Msg, Timeout) ->
-	breaky_break:call(Name, Msg, Timeout).
+    breaky_fsm:call(Name, Msg, Timeout).
 
 % @doc Cast the process 
 %
+-spec cast(Name, Msg) -> ok | {error, open} when
+    Name :: atom(),
+    Msg :: term().
 cast(Name, Msg) ->
-	breaky_break:cast(Name, Msg).
+    breaky_fsm:cast(Name, Msg).

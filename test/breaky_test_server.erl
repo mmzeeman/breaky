@@ -13,26 +13,23 @@
 -record(state, {data}).
 
 start_link(Data) ->
-	gen_server:start_link(?MODULE, Data, []).
+    gen_server:start_link(?MODULE, Data, []).
 
 init(Data) ->
-	{ok, #state{data=Data}}.
+    {ok, #state{data=Data}}.
 
 handle_call(get_data, _From, State) ->
-	{reply, {ok, State#state.data}, State};
-handle_call(crash, From, State) ->
-	From = self(), %% kaboom baby shit is gone.
-	{reply, {ok, State#state.data}, State};
+    {reply, {ok, State#state.data}, State};
 handle_call(stop, _From, State) ->
-	{stop, normal, ok, State};
+    {stop, normal, ok, State};
 handle_call(Msg, _From, State) ->
-	{stop, {unknown_cast, Msg}, State}.
+    {stop, {unknown_cast, Msg}, State}.
 
 handle_cast(Msg, State) ->
     {stop, {unknown_cast, Msg}, State}.
 
 handle_info(_Msg, State) ->
-	{noreply, State}.
+    {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.

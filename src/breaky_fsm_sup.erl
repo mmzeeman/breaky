@@ -24,15 +24,17 @@
 
 % @doc 
 -spec start_link(MFA) -> {ok, pid()} | {error, _} | ignore when
-	MFA :: mfa().
+    MFA :: mfa().
 start_link(MFA) ->
-	supervisor:start_link(?MODULE, MFA).
+    supervisor:start_link(?MODULE, MFA).
 
 % @doc Start a supervisor for the breaker. 
 %
 init({Module, Function, Args}) ->
-	% TODO: add an option to configure a task supervisor which
-	% can restart tasks if they fail.
+    % TODO: add an option to configure a task supervisor which
+    % can restart tasks if they fail.
+
+    %% TODO, support starting supervisors... and pass deps.
     {ok, {{simple_one_for_one, 10, 60},
-          [{breaky_process, {Module, Function, Args},
+          [{breaky_proc, {Module, Function, Args},
             temporary, 5000, worker, [Module]}]}}.
