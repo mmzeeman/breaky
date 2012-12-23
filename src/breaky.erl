@@ -24,7 +24,7 @@
 
 % @doc Start a new circuit breaker.
 %
--spec start_circuit_breaker(Name, MFA) -> {ok, pid()} | {error, _} | ignore when
+-spec start_circuit_breaker(Name, MFA) -> {ok, pid()} | {error, _} when
     Name :: atom(),
     MFA :: mfa().
 start_circuit_breaker(Name, MFA) ->

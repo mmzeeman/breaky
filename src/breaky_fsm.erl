@@ -225,16 +225,19 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 
 % utility functions
 
-start_process(#state{sup=Sup, remainder_fails=F}=State) when F > 0->
+start_process(#state{sup=Sup, remainder_fails=N}=State) when N > 0->
     case supervisor:start_child(Sup, []) of
         {ok, Pid} ->
             NewRef = erlang:monitor(process, Pid),
             {closed, State#state{ref=NewRef, pid=Pid}};
+        {ok, Pid, _Info} ->
+            NewRef = erlang:monitor(process, Pid),
+            {closed, State#state{ref=NewRef, pid=Pid}};
         {error, Error} ->
             error_logger:error_msg("Circuit breaker could not start process: ~p~n", [Error]),
-            start_process(State#state{remainder_fails=F-1})
+            start_process(State#state{remainder_fails=N-1})
     end;
-start_process(#state{remainder_fails=F}=State) when F =< 0 ->
+start_process(#state{remainder_fails=N}=State) when N =< 0 ->
     error_logger:error_msg("Too many failures, switching to open state~n", []),
     TimerRef = gen_fsm:send_event_after(State#state.retry_timeout, retry),
     {open, State#state{retry_timer=TimerRef, remainder_fails=0}}.
