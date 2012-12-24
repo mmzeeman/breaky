@@ -80,10 +80,15 @@ start_link(Name, Sup, MFA) ->
 
 % @doc Return the pid of the process we are managing.
 %
+-spec pid(Name) -> {ok, pid()} | open when
+    Name :: atom() | {global, term()} | {via, module(), term()}.
 pid(Name) ->
     gen_fsm:sync_send_event(Name, pid).
 
 % @doc get the current state of the circuit breaker
+%
+-spec state(Name) -> closed | open when
+    Name :: atom() | {global, term()} | {via, module(), term()}.
 state(Name) ->
     gen_fsm:sync_send_all_state_event(Name, state).
 
@@ -92,44 +97,54 @@ call(Name, Msg) ->
     call(Name, Msg, 5000).
 
 call(Name, Msg, infinity) ->
-    case gen_fsm:sync_send_event(Name, get_pid, infinity) of
+    case gen_fsm:sync_send_event(Name, pid, infinity) of
         {ok, Pid} ->
             %% TODO: add a catch and administrate failures.
-            gen_server:call(Pid, Msg, infinity);
-        E -> E
+            {ok, gen_server:call(Pid, Msg, infinity)};
+        open -> open
     end;
 call(Name, Msg, Timeout) ->
     %% TODO: calculate the right timeout here.
-    case gen_fsm:sync_send_event(Name, get_pid, Timeout) of
+    case gen_fsm:sync_send_event(Name, pid, Timeout) of
         {ok, Pid} ->
-            %% TODO: add a catch and administrate failures.
-            gen_server:call(Pid, Msg, Timeout);
-        E -> E
+            {ok, gen_server:call(Pid, Msg, Timeout)};
+        open -> open
     end.
 
 cast(Name, Msg) ->
-    case gen_fsm:sync_send_event(Name, get_pid) of
+    case gen_fsm:sync_send_event(Name, pid) of
         {ok, Pid} ->
-            gen_server:cast(Pid, Msg);
-        E -> E
+            {ok, gen_server:cast(Pid, Msg)};
+        open -> open
     end.
 
 %% Let the circuit breaker act as a process registry. Returns the
 %% Pid when the process is running.
 whereis_name(Name) ->
-    case gen_fsm:sync_send_event(Name, get_pid) of
-        {ok, Pid} -> Pid;
-        E -> E
+    case fsm_pid(Name) of
+        undefined -> undefined;
+        Pid -> 
+            case gen_fsm:sync_send_event(Pid, pid) of
+                {ok, Pid} -> 
+                    Pid;
+                open -> undefined
+            end
     end.
 
 % %% Let the circuit breaker act as a process registry. Returns the
 % %% Pid when the process is running.
 send(Name, Msg) ->
-    case gen_fsm:sync_send_event(Name, get_pid) of
-        {ok, Pid} -> 
-            Pid ! Msg,
-            Pid;
-        E -> E
+    case fsm_pid(Name) of
+        undefined ->
+            exit({badarg, Name, Msg});
+        FsmPid ->
+            case gen_fsm:sync_send_event(FsmPid, pid) of
+                {ok, Pid} -> 
+                    Pid ! Msg,
+                    Pid;
+                open -> 
+                    exit({badarg, Name, Msg})
+            end
     end.
 
 %% Initialize the circuit breaker. It is in closed state.
@@ -177,7 +192,7 @@ open(Event, State) ->
     {stop, {error, {unknown_event, Event}}, State}.
 
 open(pid, _From, State) ->
-    {reply, {error, open}, open, State};
+    {reply, open, open, State};
 open(Event, _From, State) ->
     {stop, {error, {unknown_event, Event}}, State}.
 
@@ -242,3 +257,10 @@ start_process(#state{remainder_fails=N}=State) when N =< 0 ->
     TimerRef = gen_fsm:send_event_after(State#state.retry_timeout, retry),
     {open, State#state{retry_timer=TimerRef, remainder_fails=0}}.
 
+%
+fsm_pid(Name) when is_atom(Name) ->
+    whereis(Name);
+fsm_pid({global, Name}) ->
+    global:whereis_name(Name);
+fsm_pid({via, Module, Name}) ->
+    Module:whereis_name(Name).

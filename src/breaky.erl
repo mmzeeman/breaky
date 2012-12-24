@@ -39,27 +39,27 @@ stop_circuit_breaker(Name) ->
 
 % @doc Get the pid of the process managed by the supervisor
 %
--spec pid(Name) -> {ok, pid()} | {error, _} when
+-spec pid(Name) -> {ok, pid()} | open when
     Name :: atom().
 pid(Name) ->
     breaky_fsm:pid(Name).
 
 % @doc Get the pid of the process managed by the supervisor
 %
--spec state(Name) -> closed | half_open | open when
+-spec state(Name) -> closed | open when
     Name :: atom().
 state(Name) ->
     breaky_fsm:state(Name).
 
 % @doc Call the process
 %
--spec call(Name, Msg) -> any() when
+-spec call(Name, Msg) -> {ok, term()} | open when
     Name :: atom(),
     Msg :: term().
 call(Name, Msg) ->
     call(Name, Msg, 5000).
 
--spec call(Name, Msg, Timeout) -> any() when
+-spec call(Name, Msg, Timeout) -> {ok, term()} | open when
     Name :: atom(),
     Msg :: term(),
     Timeout :: non_neg_integer() | infinity.
@@ -68,7 +68,7 @@ call(Name, Msg, Timeout) ->
 
 % @doc Cast the process 
 %
--spec cast(Name, Msg) -> ok | {error, open} when
+-spec cast(Name, Msg) -> ok | open when
     Name :: atom(),
     Msg :: term().
 cast(Name, Msg) ->

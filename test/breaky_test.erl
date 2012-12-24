@@ -82,28 +82,30 @@ crash_something_t() ->
     breaky:stop_circuit_breaker(circuit1).
 
 state_t() ->
-    {ok, BPid} = breaky:start_circuit_breaker(circuit1, 
+    {ok, _BPid} = breaky:start_circuit_breaker(circuit1, 
         {breaky_test_server, start_link, ["data"]}),
     closed = breaky:state(circuit1),
     breaky:stop_circuit_breaker(circuit1),
     ok.
 
-
 push_it_to_open_state_t() ->
-    {ok, BPid} = breaky:start_circuit_breaker(circuit1, 
+    {ok, _BPid} = breaky:start_circuit_breaker(circuit1, 
         {breaky_test_server, start_link, ["data"]}),
     closed = breaky:state(circuit1),
 
     %% 10 failures...
     repeat(fun() ->
             {ok, Pid} = breaky:pid(circuit1),
+            {ok, {ok, "data"}} = breaky:call(circuit1, get_data),
             exit(Pid, brutal_kill),
             timer:sleep(20)
            end, 10),
 
-    %% It is in open state now... no pids
-    open = breaky:state(circuit1),
-    {error, open} = breaky:pid(circuit1),
+    %% Kaboom baby, shit is gone!
+    %% Anyhow the circuit breaker is now in open state no pid
+    open = breaky:pid(circuit1),
+
+    open = breaky:call(circuit1, get_data),
 
     breaky:stop_circuit_breaker(circuit1),
     ok.
