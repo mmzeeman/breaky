@@ -27,6 +27,7 @@
     start_link/3,
     pid/1,
     state/1,
+    failure/1,
     call/2, call/3,
     cast/2,
     whereis_name/1,
@@ -85,12 +86,19 @@ start_link(Name, Sup, MFA) ->
 pid(Name) ->
     gen_fsm:sync_send_event(Name, pid).
 
-% @doc get the current state of the circuit breaker
+% @doc Get the current state of the circuit breaker
 %
 -spec state(Name) -> closed | open when
     Name :: atom() | {global, term()} | {via, module(), term()}.
 state(Name) ->
     gen_fsm:sync_send_all_state_event(Name, state).
+
+% @doc Register something as a failure.
+%
+-spec failure(Name) -> ok when
+    Name :: atom() | {global, term()} | {via, module(), term()}.
+failure(Name) ->
+    gen_fsm:send_event(Name, failure).
 
 % This w
 call(Name, Msg) ->
@@ -100,24 +108,18 @@ call(Name, Msg, infinity) ->
     case gen_fsm:sync_send_event(Name, pid, infinity) of
         open -> open;
         {ok, Pid} ->
-            {ok, do_call(Name, Pid, Msg, infinity)}
+            {ok, do_call(Pid, Msg, infinity)}
     end;
 call(Name, Msg, Timeout) ->
     %% TODO: calculate the right timeout here.
     case gen_fsm:sync_send_event(Name, pid, Timeout) of
         open -> open;
         {ok, Pid} ->
-            {ok, do_call(Name, Pid, Msg, Timeout)}
+            {ok, do_call(Pid, Msg, Timeout)}
     end.
 
-do_call(Name, Pid, Msg, Timeout) ->
-    try gen_server:call(Pid, Msg, Timeout) of
-        Result -> Result
-    catch
-        Exception ->
-            gen_fsm:send_event(Name, failure),
-            throw(Exception)
-    end.
+do_call(Pid, Msg, Timeout) -> 
+    gen_server:call(Pid, Msg, Timeout).
 
 cast(Name, Msg) ->
     case gen_fsm:sync_send_event(Name, pid) of
