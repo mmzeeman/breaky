@@ -40,7 +40,6 @@
     initializing/2, initializing/3, 
     closed/2, closed/3, 
     open/2, open/3,
-%   reset/0,
     handle_event/3,
     handle_sync_event/4,
     handle_info/3, 
@@ -74,10 +73,10 @@
 %% Start a circuit breaker.
 
 %% TODO: support for global and via
-start_link(Name, MFA) ->
-    start_link(Name, self(), MFA).
-start_link(Name, Sup, MFA) ->
-    gen_fsm:start_link({local, Name}, ?MODULE, [Name, Sup, MFA], []).
+start_link(Name, Spec) ->
+    start_link(Name, self(), Spec).
+start_link(Name, Sup, Spec) ->
+    gen_fsm:start_link({local, Name}, ?MODULE, [Name, Sup, Spec], []).
 
 % @doc Return the pid of the process we are managing.
 %
@@ -159,8 +158,8 @@ send(Name, Msg) ->
 
 %% Initialize the circuit breaker. It is in closed state.
 %% 
-init([Name, Sup, MFA]) ->
-    self() ! {initialize, Sup, MFA},
+init([Name, Sup, Spec]) ->
+    self() ! {initialize, Sup, Spec},
     {ok, initializing, #state{name=Name}}.
 
 % @doc Not expecting any events in init state.
@@ -171,7 +170,7 @@ initializing(_Event, _From, State) ->
 
 % @doc The automatic circuit breaker is closed
 closed(retry, State) ->
-    error_logger:error_msg("Received retry, but circuit breaker is closed.~n", []),
+    error_msg("Received retry, but circuit breaker is closed.", State),
     State1 = State#state{retry_timer=undefined},
     {next_state, closed, State1};
 closed(failure, #state{remainder_fails=N}=State) when N > 1 ->
@@ -181,7 +180,7 @@ closed(failure, #state{sup=Sup, pid=Pid, remainder_fails=N}=State) when N =< 1 -
     case supervisor:terminate_child(Sup, Pid) of
         ok -> ok;
         {error, Err} ->
-            error_logger:error_msg("Problem terminating child: ~p~n", [Err])
+            error_msg("Problem terminating child: ~p", [Err], State)
     end,
     TimerRef = gen_fsm:send_event_after(State#state.retry_timeout, retry),
     {next_state, open, State#state{pid=undefined, retry_timer=TimerRef, remainder_fails=N-1}};
@@ -224,21 +223,21 @@ open(Event, _From, State) ->
 handle_event(_Msg, StateName, State) ->
     {next_state, StateName, State}.
 
-% @doc 
+% @doc Return the state of the circuit-breaker
 handle_sync_event(state, _From, StateName, State) ->
     {reply, StateName, StateName, State};
 handle_sync_event(_Msg, _From, StateName, State) ->
     {reply, ok, StateName, State}.
 
 % @doc initialize. start the supervisor. 
-handle_info({initialize, Sup, MFA}, initializing, State) ->
-    Spec = {breaky_fsm_sup,
-            {breaky_fsm_sup, start_link, [MFA]},
+handle_info({initialize, Sup, Spec}, initializing, State) ->
+    ChildSpec = {breaky_fsm_sup, 
+            {breaky_fsm_sup, start_link, [Spec]},
              permanent, 10000, supervisor, [breaky_fsm_sup]},
-    {ok, SupPid} = supervisor:start_child(Sup, Spec),
+    {ok, SupPid} = supervisor:start_child(Sup, ChildSpec),
     {NextState, NewState} = start_process(State#state{sup=SupPid}),
     {next_state, NextState, NewState};    
-handle_info({initialize, _Sup, _MFA}, _Other, State) ->
+handle_info({initialize, _Sup, _Spec}, _Other, State) ->
     {stop, {error, already_initialized}, State};
 
 %% The process stopped normally. 
@@ -247,23 +246,24 @@ handle_info({'DOWN', Ref, process, _Pid, normal}, StateName, #state{ref=Ref}=Sta
 
 % Failure.... restart? or move to open state?
 handle_info({'DOWN', Ref, process, _Pid, Reason}, closed, #state{ref=Ref, remainder_fails=R}=State) ->
-    error_logger:error_msg("Process failed: ~p~n", [Reason]),
+    error_msg("Process down: ~p", [Reason], State),
     {NextState, NewState} = start_process(State#state{pid=undefined, ref=undefined, remainder_fails=R-1}),
     {next_state, NextState, NewState};
 
 handle_info(_Msg, StateName, #state{}=State) ->
     {next_state, StateName, State}.
 
-% @doc 
+% @doc Terminate the fsm. 
 terminate(_Reason, _StateName, _State) ->
+    % the supervisor will stop the process.
     ok.
 
-% @doc
 code_change(_OldVsn, StateName, State, _Extra) ->
     {ok, StateName, State}.
 
-% utility functions
+% -- utility functions
 
+% start the process.
 start_process(#state{sup=Sup, remainder_fails=N}=State) when N > 0->
     case supervisor:start_child(Sup, []) of
         {ok, Pid} ->
@@ -273,18 +273,25 @@ start_process(#state{sup=Sup, remainder_fails=N}=State) when N > 0->
             NewRef = erlang:monitor(process, Pid),
             {closed, State#state{ref=NewRef, pid=Pid}};
         {error, Error} ->
-            error_logger:error_msg("Circuit breaker could not start process: ~p~n", [Error]),
+            error_msg("Could not start process: ~p", [Error], State),
             start_process(State#state{remainder_fails=N-1})
     end;
 start_process(#state{remainder_fails=N}=State) when N =< 0 ->
-    error_logger:error_msg("Too many failures, switching to open state~n", []),
+    error_msg("Too many failures, switching to open state.", State),
     TimerRef = gen_fsm:send_event_after(State#state.retry_timeout, retry),
     {open, State#state{retry_timer=TimerRef, remainder_fails=0}}.
 
-%
+% Return the pid of the breaker fsm
 fsm_pid(Name) when is_atom(Name) ->
     whereis(Name);
 fsm_pid({global, Name}) ->
     global:whereis_name(Name);
 fsm_pid({via, Module, Name}) ->
     Module:whereis_name(Name).
+
+% Log errors.
+error_msg(Msg, #state{name=Name}) ->
+    error_logger:error_msg("Circuit breaker '~s': ~s", [Name, Msg]).
+
+error_msg(Msg, Args, #state{name=Name}) ->
+    error_logger:error_msg("Circuit breaker '~s': "++Msg, [Name | Args]).

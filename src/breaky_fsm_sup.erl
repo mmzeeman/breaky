@@ -23,15 +23,20 @@
 -behaviour(supervisor).
 
 % @doc 
--spec start_link(MFA) -> {ok, pid()} | {error, _} | ignore when
-    MFA :: mfa().
+-spec start_link(Spec) -> {ok, pid()} | {error, _} | ignore when
+    Spec :: mfa() | {mfa(), non_neg_integer(), worker | supervisor, list(atom())}.
 start_link(MFA) ->
     supervisor:start_link(?MODULE, MFA).
 
 % @doc Start a supervisor for the breaker. 
 %
+
+% {M, F, A},
+% shutdowntimeout, worker | supervisor, deps
 init({Module, Function, Args}) ->
-    %% TODO, support for starting supervisors... and passing dependencies.
+    init({{Module, Function, Args}, 5000, worker, [Module]});
+init({{Module, Function, Args}, ShutdownTimeout, Type, Deps}) 
+        when Type =:= worker; Type =:= supervisor ->
     {ok, {{simple_one_for_one, 10, 60},
           [{breaky_proc, {Module, Function, Args},
-            temporary, 5000, worker, [Module]}]}}.
+            temporary, ShutdownTimeout, Type, Deps}]}}.
