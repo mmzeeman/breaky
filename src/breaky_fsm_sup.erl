@@ -31,10 +31,7 @@ start_link(MFA) ->
 % @doc Start a supervisor for the breaker. 
 %
 init({Module, Function, Args}) ->
-    % TODO: add an option to configure a task supervisor which
-    % can restart tasks if they fail.
-
-    %% TODO, support starting supervisors... and pass deps.
+    %% TODO, support for starting supervisors... and passing dependencies.
     {ok, {{simple_one_for_one, 10, 60},
           [{breaky_proc, {Module, Function, Args},
             temporary, 5000, worker, [Module]}]}}.

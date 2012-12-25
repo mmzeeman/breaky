@@ -98,24 +98,32 @@ call(Name, Msg) ->
 
 call(Name, Msg, infinity) ->
     case gen_fsm:sync_send_event(Name, pid, infinity) of
+        open -> open;
         {ok, Pid} ->
-            %% TODO: add a catch and administrate failures.
-            {ok, gen_server:call(Pid, Msg, infinity)};
-        open -> open
+            {ok, do_call(Name, Pid, Msg, infinity)}
     end;
 call(Name, Msg, Timeout) ->
     %% TODO: calculate the right timeout here.
     case gen_fsm:sync_send_event(Name, pid, Timeout) of
+        open -> open;
         {ok, Pid} ->
-            {ok, gen_server:call(Pid, Msg, Timeout)};
-        open -> open
+            {ok, do_call(Name, Pid, Msg, Timeout)}
+    end.
+
+do_call(Name, Pid, Msg, Timeout) ->
+    try gen_server:call(Pid, Msg, Timeout) of
+        Result -> Result
+    catch
+        Exception ->
+            gen_fsm:send_event(Name, failure),
+            throw(Exception)
     end.
 
 cast(Name, Msg) ->
     case gen_fsm:sync_send_event(Name, pid) of
+        open -> open;
         {ok, Pid} ->
-            {ok, gen_server:cast(Pid, Msg)};
-        open -> open
+            {ok, gen_server:cast(Pid, Msg)}
     end.
 
 %% Let the circuit breaker act as a process registry. Returns the
@@ -164,6 +172,17 @@ closed(retry, State) ->
     error_logger:error_msg("Received retry, but circuit breaker is closed.~n", []),
     State1 = State#state{retry_timer=undefined},
     {next_state, closed, State1};
+closed(failure, #state{remainder_fails=N}=State) when N > 1 ->
+    {next_state, closed, State#state{remainder_fails=N-1}};
+closed(failure, #state{sup=Sup, pid=Pid, remainder_fails=N}=State) when N =< 1 ->
+    %% Too many failures. Move to open state... stop the process.
+    case supervisor:terminate_child(Sup, Pid) of
+        ok -> ok;
+        {error, Err} ->
+            error_logger:error_msg("Problem terminating child: ~p~n", [Err])
+    end,
+    TimerRef = gen_fsm:send_event_after(State#state.retry_timeout, retry),
+    {next_state, open, State#state{pid=undefined, retry_timer=TimerRef, remainder_fails=N-1}};
 closed(Event, State) -> 
     {stop, {error, {unknown_event, Event}}, State}.
 
@@ -180,7 +199,7 @@ closed(Event, _From, State) ->
 open(retry, #state{failure_threshold=Max}=State) ->
     State1 = State#state{retry_timer=undefined},
 
-    %% Try to restart the process...
+    %% Restart the process...
     {NextState, NewState} = start_process(State1#state{remainder_fails=1}),
     NewState1 = case NextState of
         closed -> NewState#state{remainder_fails=Max};
@@ -188,6 +207,9 @@ open(retry, #state{failure_threshold=Max}=State) ->
     end,
 
     {next_state, NextState, NewState1};
+open(failure, State) ->
+    %% We have already failed.
+    {next_state, open, State};
 open(Event, State) ->
     {stop, {error, {unknown_event, Event}}, State}.
 
