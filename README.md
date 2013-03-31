@@ -18,6 +18,7 @@ This will prevent the fault from cascading through the system.
 
 Example:
 
+```erlang
     %% Start the circuit breaker for the database. It is an external resource.
     {ok, _Pid} = breaky:start_circuit_breaker(db, {start_link, database, 
         [{user, "me"}, {user, "1234"}]}),
@@ -32,4 +33,4 @@ Example:
             Result
     end,
     ...
-
+```
