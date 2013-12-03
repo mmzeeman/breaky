@@ -51,7 +51,7 @@ pid(Name) ->
 state(Name) ->
     breaky_fsm:state(Name).
 
-% @doc Register something as a failure.
+% @doc Register something as a failure. 
 %
 -spec failure(Name) -> ok when
     Name :: atom() | {global, term()} | {via, module(), term()}.
