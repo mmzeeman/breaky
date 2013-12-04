@@ -7,6 +7,9 @@ into a known good state by restarting. The supervisor has no control over it. Wh
 too often, the supervisor will fail too, and if a supervisor is restarted often enough it 
 can take down the whole system down.
 
+![Circuit Breaker](doc/circuit-breaker.jpg "Circuit Breaker")
+Photo by [leafbug](http://www.flickr.com/photos/leafbug/) 
+
 Breaky acts as a automatic circuit breaker "middleman" for these kind of processes. The 
 process are started and managed in a normal OTP supervision tree. Restarts are managed 
 by a circuit breaker FSM. When the FSM detects too many failures it will try to re-establish
