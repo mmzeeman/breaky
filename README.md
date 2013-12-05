@@ -14,8 +14,8 @@ Breaky acts as a automatic circuit breaker "middleman" for these kind of process
 process are started and managed in a normal OTP supervision tree. Restarts are managed 
 by a circuit breaker FSM. When the FSM detects too many failures it will try to re-establish
 the service, but when a certaint threshold of restarts has been reached the restarts will be 
-done in a slower rate and calls or casts to the failing process will result in ```open``` to notify 
-that the circuit breaker is open and the process is not available. This will prevent the fault 
+done in a slower rate and calls or casts to the failing process will result in ```off``` to notify 
+that the circuit breaker is off and the process is not available. This will prevent the fault 
 from cascading through the system.
 
 Example:
@@ -28,7 +28,7 @@ Example:
     ...
     
     case breaky:call(db, "select * from my_table;") of
-        open ->
+        off ->
             error_logger:error_msg("database unavailable"); 
             {error, db_unavailable};
         {ok, Result} ->
@@ -41,5 +41,5 @@ Example:
 
 | State |  Description |
 | -------: | :---------- |
-| Open | In open state the process is not available |
-| Closed | The process is running normally |
+| Off | In open state the process is not available |
+| On | The process is running normally |

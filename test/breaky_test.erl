@@ -21,7 +21,7 @@ breaky_test_() ->
        ?_test(multiple_t()),
        ?_test(crash_something_t()),
        ?_test(state_t()),
-       ?_test(push_it_to_open_state_t())
+       ?_test(push_it_to_off_state_t())
      ]
     }.
 
@@ -63,13 +63,13 @@ crash_something_t() ->
     %% Kill the process.
     {ok, Pid1} = breaky:pid(circuit1),
 
-    closed = breaky:state(circuit1),
+    on = breaky:state(circuit1),
 
     exit(Pid1, brutal_kill),
     false = is_process_alive(Pid1),
     true = is_process_alive(BPid),
 
-    closed = breaky:state(circuit1),
+    on = breaky:state(circuit1),
 
     %% Give it some time to restart.
     timer:sleep(100),
@@ -84,14 +84,14 @@ crash_something_t() ->
 state_t() ->
     {ok, _BPid} = breaky:start_circuit_breaker(circuit1, 
         {breaky_test_server, start_link, ["data"]}),
-    closed = breaky:state(circuit1),
+    on = breaky:state(circuit1),
     breaky:stop_circuit_breaker(circuit1),
     ok.
 
-push_it_to_open_state_t() ->
+push_it_to_off_state_t() ->
     {ok, _BPid} = breaky:start_circuit_breaker(circuit1, 
         {breaky_test_server, start_link, ["data"]}),
-    closed = breaky:state(circuit1),
+    on = breaky:state(circuit1),
 
     %% 10 failures...
     repeat(fun() ->
@@ -102,10 +102,10 @@ push_it_to_open_state_t() ->
            end, 10),
 
     %% Kaboom baby, shit is gone!
-    %% Anyhow the circuit breaker is now in open state no pid
-    open = breaky:pid(circuit1),
+    %% Anyhow the circuit breaker is now in off state no pid
+    off = breaky:pid(circuit1),
 
-    open = breaky:call(circuit1, get_data),
+    off = breaky:call(circuit1, get_data),
 
     breaky:stop_circuit_breaker(circuit1),
     ok.

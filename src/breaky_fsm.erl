@@ -38,8 +38,8 @@
 -export([
     init/1,
     initializing/2, initializing/3, 
-    closed/2, closed/3, 
-    open/2, open/3,
+    on/2, on/3, 
+    off/2, off/3,
     handle_event/3,
     handle_sync_event/4,
     handle_info/3, 
@@ -64,10 +64,10 @@
 %%
 %% The circuit breaker has two states.
 %%
-%% 1) ``closed``, everything is normal.
-%% 2) ``open``, the process has failed to many times, after timeout the 
+%% 1) ``on``, everything is normal.
+%% 2) ``off``, the process has failed to many times, after timeout the 
 %%    switch will retry to start the process. If it fails it will move 
-%%    back to open state, otherwise it will go to closed state again.
+%%    back to off state, otherwise it will go to on state again.
 %%
 
 %% Start a circuit breaker.
@@ -80,14 +80,14 @@ start_link(Name, Sup, Spec) ->
 
 % @doc Return the pid of the process we are managing.
 %
--spec pid(Name) -> {ok, pid()} | open when
+-spec pid(Name) -> {ok, pid()} | off when
     Name :: atom() | {global, term()} | {via, module(), term()}.
 pid(Name) ->
     gen_fsm:sync_send_event(Name, pid).
 
 % @doc Get the current state of the circuit breaker
 %
--spec state(Name) -> closed | open when
+-spec state(Name) -> on | off when
     Name :: atom() | {global, term()} | {via, module(), term()}.
 state(Name) ->
     gen_fsm:sync_send_all_state_event(Name, state).
@@ -105,14 +105,14 @@ call(Name, Msg) ->
 
 call(Name, Msg, infinity) ->
     case gen_fsm:sync_send_event(Name, pid, infinity) of
-        open -> open;
+        off -> off;
         {ok, Pid} ->
             {ok, do_call(Pid, Msg, infinity)}
     end;
 call(Name, Msg, Timeout) ->
     %% TODO: calculate the right timeout here.
     case gen_fsm:sync_send_event(Name, pid, Timeout) of
-        open -> open;
+        off -> off;
         {ok, Pid} ->
             {ok, do_call(Pid, Msg, Timeout)}
     end.
@@ -122,7 +122,7 @@ do_call(Pid, Msg, Timeout) ->
 
 cast(Name, Msg) ->
     case gen_fsm:sync_send_event(Name, pid) of
-        open -> open;
+        off -> off;
         {ok, Pid} ->
             {ok, gen_server:cast(Pid, Msg)}
     end.
@@ -136,7 +136,7 @@ whereis_name(Name) ->
             case gen_fsm:sync_send_event(Pid, pid) of
                 {ok, Pid} -> 
                     Pid;
-                open -> undefined
+                off -> undefined
             end
     end.
 
@@ -151,12 +151,12 @@ send(Name, Msg) ->
                 {ok, Pid} -> 
                     Pid ! Msg,
                     Pid;
-                open -> 
+                off -> 
                     exit({badarg, Name, Msg})
             end
     end.
 
-%% Initialize the circuit breaker. It is in closed state.
+%% Initialize the circuit breaker. It is in on state.
 %% 
 init([Name, Sup, Spec]) ->
     self() ! {initialize, Sup, Spec},
@@ -168,55 +168,55 @@ initializing(_Event, State) ->
 initializing(_Event, _From, State) ->
     {stop, {error, not_initialized}, State}.
 
-% @doc The automatic circuit breaker is closed
-closed(retry, State) ->
-    error_msg("Received retry, but circuit breaker is closed.", State),
+% @doc The automatic circuit breaker is on
+on(retry, State) ->
+    error_msg("Received retry, but circuit breaker is on.", State),
     State1 = State#state{retry_timer=undefined},
-    {next_state, closed, State1};
-closed(failure, #state{remainder_fails=N}=State) when N > 1 ->
-    {next_state, closed, State#state{remainder_fails=N-1}};
-closed(failure, #state{sup=Sup, pid=Pid, remainder_fails=N}=State) when N =< 1 ->
-    %% Too many failures. Move to open state... stop the process.
+    {next_state, on, State1};
+on(failure, #state{remainder_fails=N}=State) when N > 1 ->
+    {next_state, on, State#state{remainder_fails=N-1}};
+on(failure, #state{sup=Sup, pid=Pid, remainder_fails=N}=State) when N =< 1 ->
+    %% Too many failures. Move to off state... stop the process.
     case supervisor:terminate_child(Sup, Pid) of
         ok -> ok;
         {error, Err} ->
             error_msg("Problem terminating child: ~p", [Err], State)
     end,
     TimerRef = gen_fsm:send_event_after(State#state.retry_timeout, retry),
-    {next_state, open, State#state{pid=undefined, retry_timer=TimerRef, remainder_fails=N-1}};
-closed(Event, State) -> 
+    {next_state, off, State#state{pid=undefined, retry_timer=TimerRef, remainder_fails=N-1}};
+on(Event, State) -> 
     {stop, {error, {unknown_event, Event}}, State}.
 
-closed(pid, _From, #state{pid=Pid}=State) when is_pid(Pid) ->
-    {reply, {ok, Pid}, closed, State};
-closed(pid, _From, #state{pid=undefined}) ->
-    %% we should have a pid in closed state.
+on(pid, _From, #state{pid=Pid}=State) when is_pid(Pid) ->
+    {reply, {ok, Pid}, on, State};
+on(pid, _From, #state{pid=undefined}) ->
+    %% we should have a pid in on state.
     exit(pid_undefined);
-closed(Event, _From, State) ->
+on(Event, _From, State) ->
     {stop, {error, {unknown_event, Event}}, State}.
 
-% @doc The circuit breaker is open.
+% @doc The circuit breaker is off.
 %
-open(retry, #state{failure_threshold=Max}=State) ->
+off(retry, #state{failure_threshold=Max}=State) ->
     State1 = State#state{retry_timer=undefined},
 
     %% Restart the process...
     {NextState, NewState} = start_process(State1#state{remainder_fails=1}),
     NewState1 = case NextState of
-        closed -> NewState#state{remainder_fails=Max};
+        on -> NewState#state{remainder_fails=Max};
         _ -> NewState
     end,
 
     {next_state, NextState, NewState1};
-open(failure, State) ->
+off(failure, State) ->
     %% We have already failed.
-    {next_state, open, State};
-open(Event, State) ->
+    {next_state, off, State};
+off(Event, State) ->
     {stop, {error, {unknown_event, Event}}, State}.
 
-open(pid, _From, State) ->
-    {reply, open, open, State};
-open(Event, _From, State) ->
+off(pid, _From, State) ->
+    {reply, off, off, State};
+off(Event, _From, State) ->
     {stop, {error, {unknown_event, Event}}, State}.
 
 % @doc 
@@ -244,8 +244,8 @@ handle_info({initialize, _Sup, _Spec}, _Other, State) ->
 handle_info({'DOWN', Ref, process, _Pid, normal}, StateName, #state{ref=Ref}=State) ->
     {next_state, StateName, State#state{pid=undefined, ref=undefined}};
 
-% Failure.... restart? or move to open state?
-handle_info({'DOWN', Ref, process, _Pid, Reason}, closed, #state{ref=Ref, remainder_fails=R}=State) ->
+% Failure.... restart? or move to off state?
+handle_info({'DOWN', Ref, process, _Pid, Reason}, on, #state{ref=Ref, remainder_fails=R}=State) ->
     error_msg("Process down: ~p", [Reason], State),
     {NextState, NewState} = start_process(State#state{pid=undefined, ref=undefined, remainder_fails=R-1}),
     {next_state, NextState, NewState};
@@ -268,18 +268,18 @@ start_process(#state{sup=Sup, remainder_fails=N}=State) when N > 0->
     case supervisor:start_child(Sup, []) of
         {ok, Pid} ->
             NewRef = erlang:monitor(process, Pid),
-            {closed, State#state{ref=NewRef, pid=Pid}};
+            {on, State#state{ref=NewRef, pid=Pid}};
         {ok, Pid, _Info} ->
             NewRef = erlang:monitor(process, Pid),
-            {closed, State#state{ref=NewRef, pid=Pid}};
+            {on, State#state{ref=NewRef, pid=Pid}};
         {error, Error} ->
             error_msg("Could not start process: ~p", [Error], State),
             start_process(State#state{remainder_fails=N-1})
     end;
 start_process(#state{remainder_fails=N}=State) when N =< 0 ->
-    error_msg("Too many failures, switching to open state.", State),
+    error_msg("Too many failures, switching to off state.", State),
     TimerRef = gen_fsm:send_event_after(State#state.retry_timeout, retry),
-    {open, State#state{retry_timer=TimerRef, remainder_fails=0}}.
+    {off, State#state{retry_timer=TimerRef, remainder_fails=0}}.
 
 % Return the pid of the breaker fsm
 fsm_pid(Name) when is_atom(Name) ->
