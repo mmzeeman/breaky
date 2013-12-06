@@ -181,12 +181,11 @@ on(failure, #state{sup=Sup, pid=Pid, remainder_fails=N}=State) when N =< 1 ->
     {next_state, off, State#state{pid=undefined, retry_timer=TimerRef, remainder_fails=N-1}};
 on(Event, State) -> 
     {stop, {error, {unknown_event, Event}}, State}.
-
 on(pid, _From, #state{pid=Pid}=State) when is_pid(Pid) ->
     {reply, {ok, Pid}, on, State};
-on(pid, _From, #state{pid=undefined}) ->
-    %% we should have a pid in on state.
-    exit(pid_undefined);
+on(pid, _From, #state{pid=undefined}=State) ->
+    %% The pid can be undefined when the process exited normally.
+    {reply, undefined, on, State};
 on(Event, _From, State) ->
     {stop, {error, {unknown_event, Event}}, State}.
 
@@ -235,11 +234,11 @@ handle_info({initialize, Sup, Spec}, initializing, State) ->
 handle_info({initialize, _Sup, _Spec}, _Other, State) ->
     {stop, {error, already_initialized}, State};
 
-%% The process stopped normally. 
+%% The process stopped normally, no state change.
 handle_info({'DOWN', Ref, process, _Pid, normal}, StateName, #state{ref=Ref}=State) ->
     {next_state, StateName, State#state{pid=undefined, ref=undefined}};
-
 % Failure.... restart? or move to off state?
+% The process crashed... now what?
 handle_info({'DOWN', Ref, process, _Pid, Reason}, on, #state{ref=Ref, remainder_fails=R}=State) ->
     error_msg("Process down: ~p", [Reason], State),
     {NextState, NewState} = start_process(State#state{pid=undefined, ref=undefined, remainder_fails=R-1}),
