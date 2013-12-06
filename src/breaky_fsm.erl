@@ -31,7 +31,8 @@
     call/2, call/3,
     cast/2,
     whereis_name/1,
-    send/2
+    send/2,
+    fsm_pid/1
     ]).
 
 %% gen_fsm callbacks
@@ -276,6 +277,7 @@ start_process(#state{remainder_fails=N}=State) when N =< 0 ->
     {off, State#state{retry_timer=TimerRef, remainder_fails=0}}.
 
 % Return the pid of the breaker fsm
+-spec fsm_pid(name()) -> undefined | pid().
 fsm_pid(Name) when is_atom(Name) ->
     whereis(Name);
 fsm_pid({global, Name}) ->
