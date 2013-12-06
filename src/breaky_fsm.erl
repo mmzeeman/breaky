@@ -61,6 +61,8 @@
     ref=undefined
 }).
 
+-type name() :: atom() | {global, term()} | {via, module(), term()}.
+
 %%
 %% The circuit breaker has two states.
 %%
@@ -81,35 +83,26 @@ start_link(Name, Sup, Spec) ->
 
 % @doc Return the pid of the process we are managing.
 %
--spec pid(Name) -> {ok, pid()} | off when
-    Name :: atom() | {global, term()} | {via, module(), term()}.
+-spec pid(name()) -> {ok, pid()} | off.
 pid(Name) ->
     gen_fsm:sync_send_event(Name, pid).
 
 % @doc Get the current state of the circuit breaker
 %
--spec state(Name) -> on | off when
-    Name :: atom() | {global, term()} | {via, module(), term()}.
+-spec state(name()) -> on | off.
 state(Name) ->
     gen_fsm:sync_send_all_state_event(Name, state).
 
 % @doc Register something as a failure.
 %
--spec failure(Name) -> ok when
-    Name :: atom() | {global, term()} | {via, module(), term()}.
+-spec failure(name()) -> ok.
 failure(Name) ->
     gen_fsm:send_event(Name, failure).
 
-% This w
+% @doc Call service Name via the circuit braker.
 call(Name, Msg) ->
     call(Name, Msg, 5000).
 
-call(Name, Msg, infinity) ->
-    case gen_fsm:sync_send_event(Name, pid, infinity) of
-        off -> off;
-        {ok, Pid} ->
-            {ok, do_call(Pid, Msg, infinity)}
-    end;
 call(Name, Msg, Timeout) ->
     case gen_fsm:sync_send_event(Name, pid, Timeout) of
         off -> off;
@@ -120,6 +113,7 @@ call(Name, Msg, Timeout) ->
 do_call(Pid, Msg, Timeout) -> 
     gen_server:call(Pid, Msg, Timeout).
 
+% @doc Cast service Name via the circuit braker.
 cast(Name, Msg) ->
     case gen_fsm:sync_send_event(Name, pid) of
         off -> off;
