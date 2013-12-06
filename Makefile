@@ -1,4 +1,4 @@
-PROJECT = elli_machine
+PROJECT = breaky
 REBAR := $(shell which rebar 2>/dev/null || echo ./rebar)
 REBAR_URL := https://github.com/downloads/basho/rebar/rebar
 DIALYZER = dialyzer
@@ -29,8 +29,8 @@ distclean:
 
 build-plt:
 	@$(DIALYZER) --build_plt --output_plt .$(PROJECT).plt \
-		--apps erts kernel stdlib crypto public_key ssl -r deps
+		--apps erts kernel stdlib 
 
 dialyze:
-	@$(DIALYZER) -pa deps/*/ebin --src src --plt .$(PROJECT).plt --no_native \
-		-Werror_handling -Wrace_conditions -Wunmatched_returns 
+	@$(DIALYZER) --src src --plt .$(PROJECT).plt --no_native \
+		-Werror_handling -Wrace_conditions -Wunmatched_returns -Wunderspecs

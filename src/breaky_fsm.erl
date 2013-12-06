@@ -72,11 +72,12 @@
 
 %% Start a circuit breaker.
 
-%% TODO: support for global and via
 start_link(Name, Spec) ->
     start_link(Name, self(), Spec).
+start_link(Name, Sup, Spec) when is_atom(Name) ->
+    start_link({local, Name}, Sup, Spec);
 start_link(Name, Sup, Spec) ->
-    gen_fsm:start_link({local, Name}, ?MODULE, [Name, Sup, Spec], []).
+    gen_fsm:start_link(Name, ?MODULE, [Name, Sup, Spec], []).
 
 % @doc Return the pid of the process we are managing.
 %
@@ -110,7 +111,6 @@ call(Name, Msg, infinity) ->
             {ok, do_call(Pid, Msg, infinity)}
     end;
 call(Name, Msg, Timeout) ->
-    %% TODO: calculate the right timeout here.
     case gen_fsm:sync_send_event(Name, pid, Timeout) of
         off -> off;
         {ok, Pid} ->
@@ -124,7 +124,7 @@ cast(Name, Msg) ->
     case gen_fsm:sync_send_event(Name, pid) of
         off -> off;
         {ok, Pid} ->
-            {ok, gen_server:cast(Pid, Msg)}
+            gen_server:cast(Pid, Msg)
     end.
 
 %% Let the circuit breaker act as a process registry. Returns the
@@ -291,7 +291,7 @@ fsm_pid({via, Module, Name}) ->
 
 % Log errors.
 error_msg(Msg, #state{name=Name}) ->
-    error_logger:error_msg("Circuit breaker '~s': ~s", [Name, Msg]).
+    error_logger:error_msg("Circuit breaker ~p: ~s", [Name, Msg]).
 
 error_msg(Msg, Args, #state{name=Name}) ->
-    error_logger:error_msg("Circuit breaker '~s': "++Msg, [Name | Args]).
+    error_logger:error_msg("Circuit breaker ~p: "++Msg, [Name | Args]).

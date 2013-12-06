@@ -40,6 +40,6 @@ Example:
 ## Circuit Breaker States
 
 | State |  Description |
-| -------: | :---------- |
-| Off | In open state the process is not available |
-| On | The process is running normally |
+| -----: | :------- |
+| **Off** | The service is not available |
+| **On** | The service is running normally |
