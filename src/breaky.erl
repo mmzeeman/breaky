@@ -3,7 +3,7 @@
 %%
 %% @doc Erlang Circuit Breaker 
 %%
-%% Copyright 2012 Maas-Maarten Zeeman
+%% Copyright 2012, 2015 Maas-Maarten Zeeman
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -19,8 +19,21 @@
 
 -module(breaky).
 
--export([start_circuit_breaker/2, stop_circuit_breaker/1]).
--export([pid/1, state/1, failure/1, call/2, call/3, cast/2]).
+-export([
+    start_circuit_breaker/2, start_circuit_breaker/3, 
+    stop_circuit_breaker/1, stop_circuit_breaker/2
+]).
+
+-export([
+    pid/1, 
+    state/1, 
+    failure/1, 
+    call/2, 
+    call/3, 
+    cast/2
+]).
+
+-type serverref() :: atom() | {atom(), node()} | {global, atom()} | {via, module(), term()} | pid().
 
 % @doc Start a new circuit breaker.
 %
@@ -30,12 +43,29 @@
 start_circuit_breaker(Name, MFA) ->
     breaky_app_sup:start(Name, MFA).
 
+% @doc Start a new circuit breaker under a specified supervisor.
+%
+-spec start_circuit_breaker(Supervisor, Name, MFA) -> {ok, pid()} | {error, _} when
+    Supervisor :: serverref(),
+    Name :: atom(),
+    MFA :: mfa().
+start_circuit_breaker(Supervisor, Name, MFA) ->
+    breaky_app_sup:start(Supervisor, Name, MFA).
+
 % @doc Stop the circuit breaker with Name. 
 %
 -spec stop_circuit_breaker(Name) -> ok | {error, _} when
     Name :: atom().
 stop_circuit_breaker(Name) ->
     breaky_app_sup:stop(Name).
+
+% @doc Stop a new circuit under a specified supervisor.
+%
+-spec stop_circuit_breaker(Supervisor, Name) -> ok | {error, _} when
+    Supervisor :: serverref(),
+    Name :: atom().
+stop_circuit_breaker(Supervisor, Name) ->
+    breaky_app_sup:stop(Supervisor, Name).
 
 % @doc Get the pid of the process managed by the supervisor
 %

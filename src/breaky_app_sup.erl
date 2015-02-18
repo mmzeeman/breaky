@@ -3,7 +3,7 @@
 %%
 %% @doc Erlang Circuit Breaker
 %%
-%% Copyright 2012 Maas-Maarten Zeeman
+%% Copyright 2012, 2015 Maas-Maarten Zeeman
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -27,7 +27,12 @@
 
 -export([start_link/0]).
 
--export([start/2, stop/1]).
+%% Api
+
+-export([
+    start/2, start/3,
+    stop/1, stop/2
+]).
 
 % @doc
 start_link() ->
@@ -39,14 +44,24 @@ init([]) ->
 
 % @doc Start a circuit breaker
 start(Name, MFA) ->
+    start(?MODULE, Name, MFA).
+
+% @doc Start as child of another supervisor circuit breaker
+start(Supervisor, Name, MFA) ->
     ChildSpec = {Name,
         {breaky_sup, start_link, [Name, MFA]},
         permanent, 10000, supervisor, [breaky_sup, breaky_fsm, breaky_fsm_sup]},
-    supervisor:start_child(?MODULE, ChildSpec).
+    supervisor:start_child(Supervisor, ChildSpec).
 
 % @doc Stop the circuit breaker
 stop(Name) ->
-    case supervisor:terminate_child(?MODULE, Name) of
-        ok -> supervisor:delete_child(?MODULE, Name);
-        {error, _}=Error -> Error
+    stop(?MODULE, Name).
+
+% @doc Stop the circuit breaker.
+stop(Supervisor, Name) ->
+    case supervisor:terminate_child(Supervisor, Name) of
+        ok -> 
+            supervisor:delete_child(Supervisor, Name);
+        {error, _}=Error -> 
+            Error
     end.
