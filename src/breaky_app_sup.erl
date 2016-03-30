@@ -30,7 +30,7 @@
 %% Api
 
 -export([
-    start/2, start/3,
+    start/3, start/4,
     stop/1, stop/2
 ]).
 
@@ -43,13 +43,13 @@ init([]) ->
     {ok, {{one_for_one, 1, 3600}, []}}.
 
 % @doc Start a circuit breaker
-start(Name, MFA) ->
-    start(?MODULE, Name, MFA).
+start(Name, MFA, Opts) ->
+    start(?MODULE, Name, MFA, Opts).
 
 % @doc Start as child of another supervisor circuit breaker
-start(Supervisor, Name, MFA) ->
+start(Supervisor, Name, MFA, Opts) ->
     ChildSpec = {Name,
-        {breaky_sup, start_link, [Name, MFA]},
+        {breaky_sup, start_link, [Name, MFA, Opts]},
         permanent, 10000, supervisor, [breaky_sup, breaky_fsm, breaky_fsm_sup]},
     supervisor:start_child(Supervisor, ChildSpec).
 

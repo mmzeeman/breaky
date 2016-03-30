@@ -18,14 +18,14 @@
 %% limitations under the License.
 
 -module(breaky_sup).
--export([start_link/2, init/1]).
+-export([start_link/3, init/1]).
 -behaviour(supervisor).
 
-start_link(Name, MFA) ->
-    supervisor:start_link(?MODULE, [Name, MFA]).
+start_link(Name, MFA, Opts) ->
+    supervisor:start_link(?MODULE, [Name, MFA, Opts]).
 
-init([Name, MFA]) ->
+init([Name, MFA, Opts]) ->
     {ok, {{one_for_all, 5, 3600},
           [{breaky_fsm,
-             {breaky_fsm, start_link, [Name, MFA]},
+             {breaky_fsm, start_link, [Name, MFA, Opts]},
              permanent, 5000, worker, [breaky_fsm, breaky_fsm_sup]}]}}.

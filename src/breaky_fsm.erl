@@ -23,8 +23,7 @@
 
 %% 
 -export([
-    start_link/2,
-    start_link/3,
+    start_link/2, start_link/3, start_link/4,
     pid/1,
     state/1,
     failure/1,
@@ -76,11 +75,13 @@
 %% Start a circuit breaker.
 
 start_link(Name, Spec) ->
-    start_link(Name, self(), Spec).
-start_link(Name, Sup, Spec) when is_atom(Name) ->
-    start_link({local, Name}, Sup, Spec);
-start_link(Name, Sup, Spec) ->
-    gen_fsm:start_link(Name, ?MODULE, [Name, Sup, Spec], []).
+    start_link(Name, self(), Spec, []).
+start_link(Name, Spec, Opts) ->
+    start_link(Name, self(), Spec, Opts).
+start_link(Name, Sup, Spec, Opts) when is_atom(Name) ->
+    start_link({local, Name}, Sup, Spec, Opts);
+start_link(Name, Sup, Spec, Opts) ->
+    gen_fsm:start_link(Name, ?MODULE, [Name, Sup, Spec, Opts], []).
 
 % @doc Return the pid of the process we are managing.
 %
@@ -153,9 +154,11 @@ send(Name, Msg) ->
 
 %% Initialize the circuit breaker. It is in on state.
 %% 
-init([Name, Sup, Spec]) ->
+init([Name, Sup, Spec, Opts]) ->
     self() ! {initialize, Sup, Spec},
-    {ok, initializing, #state{name=Name}}.
+    {ok, initializing, #state{name=Name,
+                              failure_threshold = proplists:get_value(failure_threshold, Opts, 10),
+                              retry_timeout = proplists:get_value(retry_timeout, Opts, 10000)}}.
 
 % @doc Not expecting any events in init state.
 initializing(_Event, State) ->
