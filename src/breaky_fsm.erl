@@ -109,7 +109,7 @@ call(Name, Msg, Timeout) ->
     case gen_fsm:sync_send_event(Name, pid, Timeout) of
         off -> off;
         {ok, Pid} ->
-            {ok, do_call(Pid, Msg, Timeout)}
+            do_call(Pid, Msg, Timeout)
     end.
 
 do_call(Pid, Msg, Timeout) -> 
