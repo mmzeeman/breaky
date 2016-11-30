@@ -21,7 +21,8 @@
 
 -export([
     start_circuit_breaker/2, start_circuit_breaker/3, start_circuit_breaker/4,
-    stop_circuit_breaker/1, stop_circuit_breaker/2
+    stop_circuit_breaker/1, stop_circuit_breaker/2,
+    child_spec/3
 ]).
 
 -export([
@@ -63,6 +64,8 @@ start_circuit_breaker(Name, MFA, Opts) when is_list(Opts) ->
 start_circuit_breaker(Supervisor, Name, MFA, Opts) ->
     breaky_app_sup:start(Supervisor, Name, MFA, Opts).
 
+child_spec(Name, MFA, Opts) ->
+    breaky_app_sup:child_spec(Name, MFA, Opts).
 
 % @doc Stop the circuit breaker with Name. 
 %
