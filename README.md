@@ -23,7 +23,7 @@ Example:
 ```erlang
     %% Start the circuit breaker for the database. It is an external resource.
     Args = [{user, "me"}, {password, "1234"}],
-    {ok, _Pid} = breaky:start_circuit_breaker(db, {start_link, database, Args}),
+    {ok, _Pid} = breaky:start_circuit_breaker(db, {database, start_link, Args}),
  
     ...
     

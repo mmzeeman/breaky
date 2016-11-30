@@ -23,14 +23,15 @@
 -module(breaky_app_sup).
 -behaviour(supervisor).
 
--export([init/1]).
+-export([init/1,
+         child_spec/3]).
 
 -export([start_link/0]).
 
 %% Api
 
 -export([
-    start/2, start/3,
+    start/3, start/4,
     stop/1, stop/2
 ]).
 
@@ -42,15 +43,18 @@ start_link() ->
 init([]) ->
     {ok, {{one_for_one, 1, 3600}, []}}.
 
+child_spec(Name, MFA, Opts) ->
+    {Name,
+        {breaky_sup, start_link, [Name, MFA, Opts]},
+        permanent, 10000, supervisor, [breaky_sup, breaky_fsm, breaky_fsm_sup]}.
+
 % @doc Start a circuit breaker
-start(Name, MFA) ->
-    start(?MODULE, Name, MFA).
+start(Name, MFA, Opts) ->
+    start(?MODULE, Name, MFA, Opts).
 
 % @doc Start as child of another supervisor circuit breaker
-start(Supervisor, Name, MFA) ->
-    ChildSpec = {Name,
-        {breaky_sup, start_link, [Name, MFA]},
-        permanent, 10000, supervisor, [breaky_sup, breaky_fsm, breaky_fsm_sup]},
+start(Supervisor, Name, MFA, Opts) ->
+    ChildSpec = child_spec(Name, MFA, Opts),
     supervisor:start_child(Supervisor, ChildSpec).
 
 % @doc Stop the circuit breaker

@@ -20,8 +20,9 @@
 -module(breaky).
 
 -export([
-    start_circuit_breaker/2, start_circuit_breaker/3, 
-    stop_circuit_breaker/1, stop_circuit_breaker/2
+    start_circuit_breaker/2, start_circuit_breaker/3, start_circuit_breaker/4,
+    stop_circuit_breaker/1, stop_circuit_breaker/2,
+    child_spec/3
 ]).
 
 -export([
@@ -34,6 +35,7 @@
 ]).
 
 -type serverref() :: atom() | {atom(), node()} | {global, atom()} | {via, module(), term()} | pid().
+-type opts() :: [{failure_threshold, pos_integer()} | {retry_timeout, pos_integer()}].
 
 % @doc Start a new circuit breaker.
 %
@@ -41,16 +43,29 @@
     Name :: atom(),
     MFA :: mfa().
 start_circuit_breaker(Name, MFA) ->
-    breaky_app_sup:start(Name, MFA).
+    start_circuit_breaker(Name, MFA, []).
 
 % @doc Start a new circuit breaker under a specified supervisor.
 %
--spec start_circuit_breaker(Supervisor, Name, MFA) -> {ok, pid()} | {error, _} when
+-spec start_circuit_breaker(Supervisor, Name, Args) -> {ok, pid()} | {error, _} when
     Supervisor :: serverref(),
     Name :: atom(),
-    MFA :: mfa().
-start_circuit_breaker(Supervisor, Name, MFA) ->
-    breaky_app_sup:start(Supervisor, Name, MFA).
+    Args :: mfa() | opts().
+start_circuit_breaker(Supervisor, Name, MFA) when is_tuple(MFA) ->
+    start_circuit_breaker(Supervisor, Name, MFA, []);
+start_circuit_breaker(Name, MFA, Opts) when is_list(Opts) ->
+    breaky_app_sup:start(Name, MFA, Opts).
+
+-spec start_circuit_breaker(Supervisor, Name, MFA, Opts) -> {ok, pid()} | {error, _} when
+    Supervisor :: serverref(),
+    Name :: atom(),
+    MFA :: mfa(),
+    Opts :: opts().
+start_circuit_breaker(Supervisor, Name, MFA, Opts) ->
+    breaky_app_sup:start(Supervisor, Name, MFA, Opts).
+
+child_spec(Name, MFA, Opts) ->
+    breaky_app_sup:child_spec(Name, MFA, Opts).
 
 % @doc Stop the circuit breaker with Name. 
 %
